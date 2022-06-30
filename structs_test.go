@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMapNonStruct(t *testing.T) {
@@ -1450,4 +1452,33 @@ func TestMap_InterfaceTypeWithMapValue(t *testing.T) {
 	}()
 
 	_ = Map(a)
+}
+
+func TestMap_SnakeCase(t *testing.T) {
+	type B struct {
+		FieldA string
+	}
+
+	type A struct {
+		Name    string
+		FieldIP string
+		Query   string
+		Payload B
+	}
+
+	a := A{
+		Name:    "test",
+		FieldIP: "127.0.0.1",
+		Query:   "",
+		Payload: B{FieldA: "test"},
+	}
+
+	s := New(a)
+	s.FieldNameStrategy = FieldNameStrategySnakeCase
+	m := s.Map()
+	require.Contains(t, m, "name")
+	require.Contains(t, m, "field_ip")
+	require.Contains(t, m, "query")
+	require.Contains(t, m, "payload")
+	require.Contains(t, m["payload"].(map[string]interface{}), "field_a")
 }
