@@ -3,8 +3,9 @@ package structs
 
 import (
 	"fmt"
-
 	"reflect"
+
+	stringy "github.com/gobeam/Stringy"
 )
 
 var (
@@ -14,12 +15,20 @@ var (
 	DefaultTagName = "structs" // struct's field default tag name
 )
 
+type FieldNameStrategy int
+
+const (
+	FieldNameStrategyNone = iota
+	FieldNameStrategySnakeCase
+)
+
 // Struct encapsulates a struct type to provide several high level functions
 // around the struct.
 type Struct struct {
-	raw     interface{}
-	value   reflect.Value
-	TagName string
+	raw               interface{}
+	value             reflect.Value
+	TagName           string
+	FieldNameStrategy FieldNameStrategy
 }
 
 // New returns a new *Struct with the struct s. It panics if the s's kind is
@@ -95,13 +104,21 @@ func (s *Struct) FillMap(out map[string]interface{}) {
 
 	for _, field := range fields {
 		name := field.Name
+
 		val := s.value.FieldByName(name)
 		isSubStruct := false
 		var finalVal interface{}
 
 		tagName, tagOpts := parseTag(field.Tag.Get(s.TagName))
+		mapKey := name
 		if tagName != "" {
 			name = tagName
+			mapKey = tagName
+		} else {
+			switch s.FieldNameStrategy {
+			case FieldNameStrategySnakeCase:
+				mapKey = stringy.New(field.Name).SnakeCase().ToLower()
+			}
 		}
 
 		// if the value is a zero value and the field is marked as omitempty do
@@ -134,7 +151,7 @@ func (s *Struct) FillMap(out map[string]interface{}) {
 		if tagOpts.Has("string") {
 			s, ok := val.Interface().(fmt.Stringer)
 			if ok {
-				out[name] = s.String()
+				out[mapKey] = s.String()
 			}
 			continue
 		}
@@ -144,7 +161,7 @@ func (s *Struct) FillMap(out map[string]interface{}) {
 				out[k] = finalVal.(map[string]interface{})[k]
 			}
 		} else {
-			out[name] = finalVal
+			out[mapKey] = finalVal
 		}
 	}
 }
@@ -509,7 +526,8 @@ func Name(s interface{}) string {
 func (s *Struct) nested(val reflect.Value) interface{} {
 	var finalVal interface{}
 
-	v := reflect.ValueOf(val.Interface())
+	iFace := val.Interface()
+	v := reflect.ValueOf(iFace)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
@@ -518,6 +536,7 @@ func (s *Struct) nested(val reflect.Value) interface{} {
 	case reflect.Struct:
 		n := New(val.Interface())
 		n.TagName = s.TagName
+		n.FieldNameStrategy = s.FieldNameStrategy
 		m := n.Map()
 
 		// do not add the converted value if there are no exported fields, ie:
